@@ -1,0 +1,15 @@
+services:
+  - type: web
+    name: jev-paper
+    runtime: docker
+    plan: free
+    dockerfilePath: ./Dockerfile
+    healthCheckPath: /healthz
+    autoDeployTrigger: off
+    envVars:
+      - key: TRADING_LOGIN_PASSWORD
+        generateValue: true
+      - key: TYPESAFE_MODEL
+        value: jev-latest
+      - key: TRADING_DATA_DIR
+        value: /app/artifacts/trading

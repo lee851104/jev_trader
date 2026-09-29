@@ -1,0 +1,119 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="csrf-token" content="__CSRF_TOKEN__">
+  <title>Jev · 美股決策示範</title>
+  <link rel="stylesheet" href="/style.css">
+  <script src="/replay.js" defer></script>
+  <script src="/app.js" defer></script>
+</head>
+<body>
+<main>
+  <header class="topbar">
+    <h1>jev <span>／ 美股模擬交易</span></h1>
+    <p>Jev 做選擇，Python 模擬成交。</p>
+  </header>
+  <section class="setup" aria-label="模擬設定">
+    <form id="setup-form">
+      <div class="setup-row"><input id="symbol" class="symbol-picker" aria-label="美股代號" title="美股代號，例如 AAPL、MSFT、NVDA、SPY；BRK.B 也可輸入" value="SPY" placeholder="AAPL" maxlength="14" autocomplete="off" spellcheck="false" required><select id="mode" class="mode-picker" aria-label="運作模式"><option value="rule">離線模擬</option><option value="jev">真實 Jev API</option></select><p id="mode-summary" class="muted">預設使用離線示例，不呼叫 Jev。</p><div class="setup-buttons"><button type="button" data-open-dialog="settings">設定</button><button id="start" type="submit">載入行情</button></div></div>
+      <dialog id="settings" aria-labelledby="settings-title">
+        <div class="section-heading"><h2 id="settings-title">資料與模型設定</h2><button type="button" data-close-dialog>關閉</button></div>
+        <div class="setup-grid">
+          <label>行情來源<select id="source"><option value="yahoo">下載指定美股日線（Yahoo Finance，免行情金鑰）</option><option value="sample">SPY 真實歷史樣本（免行情金鑰）</option><option value="demo">合成示例（離線）</option><option value="alpha">下載指定美股日線（Alpha Vantage）</option><option value="cache">此代號的行情快取</option><option value="csv">匯入此代號 CSV（自行確認標的）</option></select></label>
+          <label>分析方式<select id="start-at"><option value="latest">最新行情判斷（不模擬未來成交）</option><option value="replay">歷史重播（可自動執行）</option></select></label>
+          <label>每筆手續費 / USD<input id="fee" type="number" min="0" max="100" step="0.01" value="1" required></label>
+          <label>滑價 / 基點<input id="slippage" type="number" min="0" max="100" step="0.1" value="1" required></label>
+        </div>
+        <label id="csv-field" hidden>CSV 檔案<input id="csv-file" type="file" accept=".csv,text/csv"><small>date,open,high,low,close,volume · 至少 21 筆 · 最大 2 MiB</small></label>
+        <p id="credentials" class="muted">讀取設定中…</p>
+        <p class="muted">Jev 模式：在本機 .env 設定 TYPESAFE_API_KEY 後重啟服務。Yahoo Finance 日線下載免行情金鑰，排除下載當日（UTC），非即時報價；Alpha Vantage 需 ALPHAVANTAGE_API_KEY。內附樣本僅支援 SPY。兩種模式都只做模擬成交。</p>
+        <p class="muted">關閉設定後，點「載入示例／行情」建立模擬。</p>
+      </dialog>
+    </form>
+  </section>
+  <div id="message" class="message" role="status" aria-live="polite" hidden></div>
+  <div id="empty" class="empty"><h2>給 Jev 行情，讓它做決策。</h2><p>輸入美股代號、載入行情，再執行決策。</p><small>內附真實 SPY 歷史樣本；離線模式用規則，API 模式用 Jev。</small></div>
+  <div id="workspace" hidden>
+    <section class="autoplay" aria-label="自動執行">
+      <div class="auto-top"><div class="auto-buttons"><button class="primary" id="auto-start" type="button">自動執行 5 天</button><button id="auto-stop" type="button" disabled>停止</button><span id="auto-count" class="muted">0 / 5 天</span></div>
+        <ol class="flow" aria-label="交易流程"><li id="flow-input"><span>1</span> 行情</li><li id="flow-decision"><span>2</span> 選擇</li><li id="flow-execution"><span>3</span> 成交</li></ol>
+      </div>
+      <progress id="auto-progress" max="5" value="0" aria-label="已推進的交易日"></progress>
+      <div class="auto-caption"><p id="auto-status" class="muted" role="status" aria-live="polite">依序決策、成交，最多推進 5 個交易日。</p><small id="auto-note">示例使用離線規則，不呼叫 Jev。</small></div>
+    </section>
+    <section class="account" aria-label="模擬帳戶">
+      <div><span class="equity-label">總資產 <b id="return-rate" aria-label="相對本金報酬率">—</b></span><strong id="equity">—</strong></div><div><span>現金</span><strong id="cash">—</strong></div><div><span>持股</span><strong id="shares">—</strong></div>
+      <p id="last-result" class="last-result" aria-live="polite">尚無成交。</p>
+    </section>
+    <div class="view-tabs" role="tablist" aria-label="儀表板檢視"><button id="tab-live" type="button" role="tab" aria-selected="true" aria-controls="live-panel" data-view="live">即時總覽</button><button id="tab-prices" type="button" role="tab" aria-selected="false" aria-controls="price-data" tabindex="-1" data-view="prices">行情紀錄</button><button id="tab-data" type="button" role="tab" aria-selected="false" aria-controls="decision-data" tabindex="-1" data-view="data">決策回傳</button></div>
+    <div class="dashboard" data-view="live">
+      <section id="live-panel" class="panel live-panel" aria-label="即時總覽">
+        <div class="section-heading visual-heading"><div><h2 id="decision-title">一筆決策，三個步驟</h2><span id="phase" class="muted"></span></div><select id="flow-select" aria-label="流程顯示的決策"><option value="latest">最新一筆（自動更新）</option></select></div>
+        <div id="decision-flow" class="decision-flow">
+          <section class="flow-card input-card" id="visual-input" aria-label="決策輸入">
+            <div class="step-heading"><span class="step-number">1</span><h2>提供資料</h2><span class="owner">你的程式</span></div>
+            <div class="price-head"><span id="flow-symbol">SPY 收盤價</span><strong id="flow-price">—</strong></div>
+            <div id="market-chart" role="img" aria-label="該筆決策使用的收盤價走勢"></div>
+            <p id="flow-range" class="muted"></p>
+            <div class="input-account"><span>可用現金 <b id="flow-cash">—</b></span><span>持股 <b id="flow-shares">—</b></span></div>
+            <p class="card-foot">最近 20 筆日線 OHLCV ＋模擬帳戶＋交易成本</p>
+          </section>
+          <section class="flow-card judgment-card" id="visual-decision" aria-label="Jev 判斷與回傳">
+            <div class="step-heading"><span class="step-number">2</span><h2 id="flow-model">Jev 判斷</h2><span id="flow-provider" class="owner"></span></div>
+            <p class="decision-question">下一個交易日，選擇哪個動作？</p>
+            <div class="choices" aria-label="模型的三種選擇"><div id="choice-buy"><strong>buy</strong><span>買入一股</span><b id="prob-buy">—</b><div class="choice-track"><i id="bar-buy"></i></div></div><div id="choice-sell"><strong>sell</strong><span>賣出一股</span><b id="prob-sell">—</b><div class="choice-track"><i id="bar-sell"></i></div></div><div id="choice-hold"><strong>hold</strong><span>維持持股</span><b id="prob-hold">—</b><div class="choice-track"><i id="bar-hold"></i></div></div></div>
+            <div id="probabilities" hidden></div>
+            <div class="return-line"><span>回傳選擇</span><strong id="flow-choice">等待判斷</strong><span id="flow-confidence"></span></div>
+            <p id="flow-explanation" class="card-foot"></p>
+            <small id="flow-model-meta"></small>
+          </section>
+          <section class="flow-card execution-card" id="visual-execution" aria-label="模擬執行結果">
+            <div class="step-heading"><span class="step-number">3</span><h2>模擬執行</h2><span class="owner">你的程式</span></div>
+            <div id="flow-result-icon" class="result-icon" aria-hidden="true">—</div>
+            <strong id="flow-result">等待決策</strong>
+            <p id="flow-fill" class="muted"></p>
+            <p id="flow-equity" class="result-equity"></p>
+            <p class="card-foot"><span id="execution-note">歷史重播才會以隔日開盤價模擬成交。</span></p>
+          </section>
+        </div>
+        <p id="flow-context" class="muted" role="status"></p>
+        <div class="decision-toolbar"><div id="decision-action" aria-live="polite">準備決策</div><div class="step-buttons" aria-label="手動逐步操作"><button id="decide" type="button">執行決策</button><button id="advance" type="button">推進下一交易日</button></div></div>
+        <details><summary>資產曲線與決策說明</summary><p id="input-summary" class="muted"></p><p id="decision-description" class="muted"></p>
+        <section id="trend" aria-label="資產變化"><div class="section-heading"><h2>資產變化</h2><span id="current-day" class="muted"></span></div><div id="chart" role="img" aria-label="資產總值隨交易日期變化"></div><p id="change" class="muted"></p></section>
+        </details>
+      </section>
+      <section id="decision-data" class="panel" aria-label="每筆決策資料">
+        <h2>每筆決策資料</h2>
+        <p id="decision-outcome" class="muted"></p>
+        <label class="decision-picker">查看哪一筆<select id="decision-select"><option value="latest">最新一筆（自動更新）</option></select></label>
+        <p id="decision-meta" class="muted"></p>
+        <p id="decision-usage" class="muted"></p>
+        <div id="decision-distribution" aria-label="各分類的機率"></div>
+        <p id="decision-confidence" class="muted"></p>
+        <p id="decision-json-label" class="muted"></p>
+        <pre id="decision-json" aria-label="選定決策的結構化結果"></pre>
+        <details id="decision-payload"><summary>完整 API 回應與輸入</summary><p class="muted">API 回應（已遮蔽金鑰）</p><pre id="decision-response"></pre><p class="muted">送入模型的資料</p><pre id="decision-request"></pre></details>
+      </section>
+      <section id="price-data" class="panel" aria-label="行情紀錄">
+        <h2 id="price-title">行情紀錄 · USD</h2><p id="price-source" class="muted"></p><p id="price-range" class="muted"></p>
+        <select id="price-scope" aria-label="行情顯示範圍"><option value="window">目前模型可見的 20 筆</option><option value="observed">截至模擬日的行情</option><option value="all">全部歷史樣本（含尚未重播）</option></select>
+        <div class="table-wrap"><table><thead><tr><th>日期</th><th>開盤</th><th>最高</th><th>最低</th><th>收盤</th><th>成交量</th><th>狀態</th></tr></thead><tbody id="price-rows"></tbody></table></div>
+        <div class="price-pagination"><button id="price-prev" type="button">上一頁</button><span id="price-page" class="muted"></span><button id="price-next" type="button">下一頁</button></div>
+        <details><summary>資料來源與驗證資訊</summary><p id="price-notice" class="muted"></p><pre id="price-provenance"></pre></details>
+      </section>
+    </div>
+    <dialog id="records" aria-labelledby="records-title">
+      <div class="section-heading"><h2 id="records-title">完整紀錄</h2><button type="button" data-close-dialog>關閉</button></div>
+      <div class="metadata"><span id="source-badge"></span><span id="mode-badge"></span><span id="data-range"></span></div><p id="data-notice" class="muted"></p><div class="metadata"><span id="cost-label"></span><span id="calls"></span><span id="latency"></span></div>
+      <div class="export-buttons"><a id="export-json" class="button" href="#">匯出 JSON</a><a id="export-csv" class="button" href="#">匯出 CSV</a></div>
+      <div class="table-wrap"><table><thead><tr><th>決策日</th><th>決策</th><th>成交日</th><th>成交價</th><th>結果</th><th>資產總值</th><th>決策資料</th></tr></thead><tbody id="history"></tbody></table></div>
+      <details id="evidence"><summary>最近一次完整執行紀錄</summary><pre id="raw-evidence"></pre></details>
+    </dialog>
+  </div>
+  <dialog id="archive" aria-labelledby="archive-title"><div class="section-heading"><h2 id="archive-title">歷史執行</h2><button type="button" data-close-dialog>關閉</button></div><button id="refresh-runs" type="button">更新紀錄</button><div id="runs" class="muted">尚無執行紀錄</div></dialog>
+  <footer><span>僅模擬，不會真實下單。未計股息與拆股。</span><div><button id="open-records" type="button" data-open-dialog="records" disabled>完整紀錄</button><button type="button" data-open-dialog="archive">歷史執行</button></div></footer>
+</main>
+</body>
+</html>

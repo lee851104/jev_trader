@@ -1,0 +1,13 @@
+{
+  "symbol": "SPY",
+  "currency": "USD",
+  "provider": "Yahoo Finance",
+  "source_url": "https://query1.finance.yahoo.com/v8/finance/chart/SPY?interval=1d&range=3mo",
+  "reference_url": "https://finance.yahoo.com/quote/SPY/history/",
+  "retrieved_at": "2026-09-25T06:50:29.774799+00:00",
+  "first_date": "2026-06-25",
+  "last_date": "2026-09-24",
+  "rows": 64,
+  "price_basis": "OHLC from indicators.quote; adjclose not used. No dividends included in simulated returns.",
+  "dataset_digest": "3e2b4b14cad4fb6c5b733240f8bee52d9951eab69b54ab8e41452d4862c82b7d"
+}

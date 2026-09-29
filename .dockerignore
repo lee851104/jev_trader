@@ -1,0 +1,9 @@
+**
+!Dockerfile
+!pyproject.toml
+!README.md
+!jev_ultrafast/
+!jev_ultrafast/**
+**/__pycache__/
+**/*.pyc
+**/.env*
