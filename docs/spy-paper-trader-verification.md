@@ -77,3 +77,9 @@ API 格式依 TypeSafe 官方文件實作；離線測試不代表使用者帳號
 測試：117 個 Python 測試通過（本次設定 CADDY_BINARY，包含真正 Caddy 代理整合測試），7 個 Node 重播測試通過，Ruff、JS 語法、sdist 與 wheel 建置通過。代理實測確認未登入、錯誤密碼、錯誤 Host／Origin、缺少 CSRF 及跨站請求被拒絕，正確登入的離線請求成功。未呼叫付費 API。
 
 本機未安裝 Docker；上述檢查不等同 Docker image 已建置或 Render 已部署。Render 上線結果須以實際建置與服務狀態另行確認。
+
+### Render 上線結果
+
+2026-09-29：服務 `jev-paper` 已部署到 https://jev-paper.onrender.com ，使用 Free Docker Web Service。實際上線提交為 `9d81ee1`；Render 回報 Deploy succeeded / Live。第一次啟動受 Caddy 檔案 capability 影響而被平台拒絕，已在映像建置階段移除不需要的 privileged-port capability，保留非 root 使用者。
+
+獨立 HTTPS 檢查：`/healthz` 回傳 200 與 `{"status":"ok"}`，首頁及 `/api/state` 未登入皆回傳 401。GitHub 為使用者既有的私人儲存庫 `lee851104/jev_trader`，金鑰與本機 artifacts 未推送。部署過程未呼叫 Jev。雲端 Jev 金鑰仍待使用者在 Render Environment 儲存並重新部署；目前線上使用者功能尚未以登入後瀏覽器驗證。
